@@ -61,7 +61,12 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+				// Crypto theme colors
+				'crypto-dark': 'hsl(var(--crypto-dark))',
+				'crypto-darker': 'hsl(var(--crypto-darker))',
+				'crypto-green': 'hsl(var(--crypto-green))',
+				'crypto-green-glow': 'hsl(var(--crypto-green-glow))'
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
