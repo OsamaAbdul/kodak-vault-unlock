@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Shield, Lock, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "../supabaseClient"; // Import the Supabase client
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -19,39 +20,58 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login validation
-    setTimeout(() => {
-      if (email && password) {
-        // Store user data in localStorage (for demo purposes)
-        localStorage.setItem("user", JSON.stringify({
-          email,
-          refundAmount: "₦2,450,000",
-          loginTime: new Date().toISOString()
-        }));
-        
+    try {
+      // Use Supabase auth to sign in
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: error.message || "Please enter valid credentials",
+        });
+      } else {
+        // Optionally store user data in localStorage or context
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            email: data.user.email,
+            refundAmount: "₦2,450,000", // Replace with actual data from your database if needed
+            loginTime: new Date().toISOString(),
+          })
+        );
+
         toast({
           title: "Login Successful",
           description: "Welcome to KODAKTECHIE Recovery Platform",
         });
-        
+
         navigate("/dashboard");
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Login Failed",
-          description: "Please enter valid credentials",
-        });
       }
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: "An unexpected error occurred. Please try again.",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-crypto-dark to-crypto-darker flex items-center justify-center p-4">
-      <div className="absolute inset-0 opacity-50" style={{
-        backgroundImage: "url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%23ffffff\" fill-opacity=\"0.02\"%3E%3Ccircle cx=\"30\" cy=\"30\" r=\"1\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')"
-      }} />
-      
+      <div
+        className="absolute inset-0 opacity-50"
+        style={{
+          backgroundImage:
+            "url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%23ffffff\" fill-opacity=\"0.02\"%3E%3Ccircle cx=\"30\" cy=\"30\" r=\"1\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
+        }}
+      />
+
       <Card className="w-full max-w-md bg-card/90 backdrop-blur-sm border-border/50 shadow-2xl">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
@@ -61,7 +81,9 @@ const Login = () => {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">KODAKTECHIE</CardTitle>
-            <CardDescription className="text-primary font-semibold">CRYPTO AND FUNDS RECOVERY</CardDescription>
+            <CardDescription className="text-primary font-semibold">
+              CRYPTO AND FUNDS RECOVERY
+            </CardDescription>
           </div>
           <div className="text-center">
             <p className="text-sm text-muted-foreground">Secure Access Portal</p>

