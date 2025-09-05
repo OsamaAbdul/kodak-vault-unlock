@@ -24,7 +24,7 @@ const Dashboard = () => {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("refundamount") // Use lowercase to match the column name
+        .select("refundamount") 
         .eq("id", authUser.id)
         .single();
 

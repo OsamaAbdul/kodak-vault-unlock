@@ -20,12 +20,13 @@ const RecoveryStep3 = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const companyWalletAddress = "0x1234567890abcdef1234567890abcdef12345678"; // Same as Step 1 and Step 2
+  const companyWalletAddress = import.meta.env.VITE_WALLET_ADDRESS;
+  const walletNetwork = import.meta.env.VITE_WALLET_NETWORK || "TRC20";
 
   const handleCopyWallet = async () => {
     try {
-      await navigator.clipboard.writeText(companyWalletAddress);
-      console.log("Step 3: Wallet address copied:", companyWalletAddress);
+      await navigator.clipboard.writeText(user.paidwallet);
+      console.log("Step 1: Wallet address copied:", user.paidwallet);
       toast({
         title: "Wallet Address Copied",
         description: "The wallet address has been copied to your clipboard.",
@@ -40,162 +41,173 @@ const RecoveryStep3 = () => {
     }
   };
 
-  // Fetch user data and extraction_fee3
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        console.log("Step 3: Fetching user data...");
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-        console.log("Step 3: Auth user:", authUser, "Auth error:", authError);
-        if (authError || !authUser) {
-          console.error("Step 3: Authentication failed, redirecting to /login");
-          toast({
-            variant: "destructive",
-            title: "Authentication Error",
-            description: "Please log in to continue.",
-          });
-          navigate("/login", { replace: true });
-          return;
-        }
 
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("step1completed, step2completed, step3completed, walletaddress, extraction_fee3")
-          .eq("id", authUser.id)
-          .single();
+// Fetch user data and extraction_fee3
 
-        console.log("Step 3: Profile data:", data, "Profile error:", error);
-        if (error) {
-          if (error.code === "PGRST116") {
-            console.log("Step 3: No profile found, creating one for user:", authUser.id);
-            const { error: insertError } = await supabase
-              .from("profiles")
-              .insert({
-                id: authUser.id,
-                refundamount: "0",
-                walletaddress: "",
-                step1completed: false,
-                step2completed: false,
-                step3completed: false,
-                extraction_fee3: 350000, // Default fee in NGN
-              });
-            if (insertError) {
-              console.error("Step 3: Insert profile error:", insertError.message, insertError.details, insertError.hint, insertError.code);
-              throw insertError;
-            }
-            // Retry fetching
-            const { data: retryData, error: retryError } = await supabase
-              .from("profiles")
-              .select("step1completed, step2completed, step3completed, walletaddress, extraction_fee3")
-              .eq("id", authUser.id)
-              .single();
-            if (retryError) {
-              console.error("Step 3: Retry fetch error:", retryError.message, retryError.details, retryError.hint, retryError.code);
-              throw retryError;
-            }
-            console.log("Step 3: Profile created:", retryData);
-            setUser({
-              id: authUser.id,
-              email: authUser.email,
-              step1Completed: retryData.step1completed,
-              step2Completed: retryData.step2completed,
-              step3Completed: retryData.step3completed,
-              walletAddress: retryData.walletaddress,
-              extractionFee: retryData.extraction_fee3,
-            });
-          } else {
-            console.error("Step 3: Profile fetch error:", error.message, error.details, error.hint, error.code);
-            throw error;
-          }
-        } else {
-          if (data.extraction_fee3 === null) {
-            console.log("Step 3: Extraction fee missing, setting default for user:", authUser.id);
-            const { error: updateError } = await supabase
-              .from("profiles")
-              .update({ extraction_fee3: 350000 })
-              .eq("id", authUser.id);
-            if (updateError) {
-              console.error("Step 3: Update fee error:", updateError.message, updateError.details, updateError.hint, updateError.code);
-              throw updateError;
-            }
-            // Retry fetching
-            const { data: retryData, error: retryError } = await supabase
-              .from("profiles")
-              .select("step1completed, step2completed, step3completed, walletaddress, extraction_fee3")
-              .eq("id", authUser.id)
-              .single();
-            if (retryError) {
-              console.error("Step 3: Retry fee fetch error:", retryError.message, retryError.details, retryError.hint, retryError.code);
-              throw retryError;
-            }
-            console.log("Step 3: Profile updated with fee:", retryData);
-            setUser({
-              id: authUser.id,
-              email: authUser.email,
-              step1Completed: retryData.step1completed,
-              step2Completed: retryData.step2completed,
-              step3Completed: retryData.step3completed,
-              walletAddress: retryData.walletaddress,
-              extractionFee: retryData.extraction_fee3,
-            });
-          } else {
-            console.log("Step 3: Profile loaded:", data);
-            setUser({
-              id: authUser.id,
-              email: authUser.email,
-              step1Completed: data.step1completed,
-              step2Completed: data.step2completed,
-              step3Completed: data.step3completed,
-              walletAddress: data.walletaddress,
-              extractionFee: data.extraction_fee3,
-            });
-            setWalletAddress(data.walletaddress || "");
-          }
-          if (!data.step1completed) {
-            console.log("Step 3: step1completed is false, redirecting to /recovery/step1");
-            toast({
-              variant: "destructive",
-              title: "Incomplete Step",
-              description: "Please complete Step 1 before proceeding.",
-            });
-            navigate("/recovery/step1", { replace: true });
-            return;
-          }
-          if (!data.step2completed) {
-            console.log("Step 3: step2completed is false, redirecting to /recovery/step2");
-            toast({
-              variant: "destructive",
-              title: "Incomplete Step",
-              description: "Please complete Step 2 before proceeding.",
-            });
-            navigate("/recovery/step2", { replace: true });
-            return;
-          }
-          if (data.step3completed) {
-            console.log("Step 3: step3completed is true, redirecting to /recovery/complete");
-            toast({
-              title: "Step 3 Already Completed",
-              description: "Redirecting to completion page.",
-            });
-            navigate("/recovery/complete", { replace: true });
-          } else {
-            console.log("Step 3: step3completed is false, staying on Step 3");
-          }
-        }
-      } catch (err: any) {
-        console.error("Step 3: Error fetching user data:", err.message, err.details, err.hint, err.code);
-        setError("Failed to fetch user data or fee");
+useEffect(() => {
+  const fetchUserData = async () => {
+    try {
+      console.log("Step 3: Fetching user data...");
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      console.log("Step 3: Auth user:", authUser, "Auth error:", authError);
+      if (authError || !authUser) {
+        console.error("Step 3: Authentication failed, redirecting to /login");
         toast({
           variant: "destructive",
-          title: "Error",
-          description: "Unable to load user data or fee. Please try again.",
+          title: "Authentication Error",
+          description: "Please log in to continue.",
         });
         navigate("/login", { replace: true });
+        return;
       }
-    };
 
-    fetchUserData();
-  }, [navigate, toast]);
+      // Include paidwallet in the select query
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("step1completed, step2completed, step3completed, walletaddress, extraction_fee3, paidwallet, paidwalletnetwork")
+        .eq("id", authUser.id)
+        .single();
+
+      console.log("Step 3: Profile data:", data, "Profile error:", error);
+      if (error) {
+        if (error.code === "PGRST116") {
+          console.log("Step 3: No profile found, creating one for user:", authUser.id);
+          const { error: insertError } = await supabase
+            .from("profiles")
+            .insert({
+              id: authUser.id,
+              refundamount: "0",
+              walletaddress: "",
+              step1completed: false,
+              step2completed: false,
+              step3completed: false,
+              extraction_fee3: 350000, // Default fee in NGN
+              paidwallet: "", // Initialize paidwallet as empty string or appropriate default
+              paidwalletnetwork: "",
+            });
+          if (insertError) {
+            console.error("Step 3: Insert profile error:", insertError.message, insertError.details, insertError.hint, insertError.code);
+            throw insertError;
+          }
+          // Retry fetching
+          const { data: retryData, error: retryError } = await supabase
+            .from("profiles")
+            .select("step1completed, step2completed, step3completed, walletaddress, extraction_fee3, paidwallet, paidwalletnetwork")
+            .eq("id", authUser.id)
+            .single();
+          if (retryError) {
+            console.error("Step 3: Retry fetch error:", retryError.message, retryError.details, retryError.hint, retryError.code);
+            throw retryError;
+          }
+          console.log("Step 3: Profile created:", retryData);
+          setUser({
+            id: authUser.id,
+            email: authUser.email,
+            step1Completed: retryData.step1completed,
+            step2Completed: retryData.step2completed,
+            step3Completed: retryData.step3completed,
+            walletAddress: retryData.walletaddress,
+            extractionFee: retryData.extraction_fee3,
+            paidwallet: retryData.paidwallet,
+            paidwalletnetwork: retryData.paidwalletnetwork,
+          });
+        } else {
+          console.error("Step 3: Profile fetch error:", error.message, error.details, error.hint, error.code);
+          throw error;
+        }
+      } else {
+        if (data.extraction_fee3 === null) {
+          console.log("Step 3: Extraction fee missing, setting default for user:", authUser.id);
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update({ extraction_fee3: 350000 })
+            .eq("id", authUser.id);
+          if (updateError) {
+            console.error("Step 3: Update fee error:", updateError.message, updateError.details, updateError.hint, updateError.code);
+            throw updateError;
+          }
+          // Retry fetching
+          const { data: retryData, error: retryError } = await supabase
+            .from("profiles")
+            .select("step1completed, step2completed, step3completed, walletaddress, extraction_fee3, paidwallet, paidwalletnetwork")
+            .eq("id", authUser.id)
+            .single();
+          if (retryError) {
+            console.error("Step 3: Retry fee fetch error:", retryError.message, retryError.details, retryError.hint, retryError.code);
+            throw retryError;
+          }
+          console.log("Step 3: Profile updated with fee:", retryData);
+          setUser({
+            id: authUser.id,
+            email: authUser.email,
+            step1Completed: retryData.step1completed,
+            step2Completed: retryData.step2completed,
+            step3Completed: retryData.step3completed,
+            walletAddress: retryData.walletaddress,
+            extractionFee: retryData.extraction_fee3,
+            paidwallet: retryData.paidwallet,
+            paidwalletnetwork: retryData.paidwalletnetwork
+          });
+        } else {
+          console.log("Step 3: Profile loaded:", data);
+          setUser({
+            id: authUser.id,
+            email: authUser.email,
+            step1Completed: data.step1completed,
+            step2Completed: data.step2completed,
+            step3Completed: data.step3completed,
+            walletAddress: data.walletaddress,
+            extractionFee: data.extraction_fee3,
+            paidwallet: data.paidwallet, 
+            paidwalletnetwork: data.paidwalletnetwork
+          });
+          setWalletAddress(data.walletaddress || "");
+        }
+        if (!data.step1completed) {
+          console.log("Step 3: step1completed is false, redirecting to /recovery/step1");
+          toast({
+            variant: "destructive",
+            title: "Incomplete Step",
+            description: "Please complete Step 1 before proceeding.",
+          });
+          navigate("/recovery/step1", { replace: true });
+          return;
+        }
+        if (!data.step2completed) {
+          console.log("Step 3: step2completed is false, redirecting to /recovery/step2");
+          toast({
+            variant: "destructive",
+            title: "Incomplete Step",
+            description: "Please complete Step 2 before proceeding.",
+          });
+          navigate("/recovery/step2", { replace: true });
+          return;
+        }
+        if (data.step3completed) {
+          console.log("Step 3: step3completed is true, redirecting to /recovery/complete");
+          toast({
+            title: "Step 3 Already Completed",
+            description: "Redirecting to completion page.",
+          });
+          navigate("/recovery/complete", { replace: true });
+        } else {
+          console.log("Step 3: step3completed is false, staying on Step 3");
+        }
+      }
+    } catch (err: any) {
+      console.error("Step 3: Error fetching user data:", err.message, err.details, err.hint, err.code);
+      setError("Failed to fetch user data or fee");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Unable to load user data or fee. Please try again.",
+      });
+      navigate("/login", { replace: true });
+    }
+  };
+
+  fetchUserData();
+}, [navigate, toast]);
 
   // Real-time subscription for step3completed changes
   useEffect(() => {
@@ -504,10 +516,10 @@ const RecoveryStep3 = () => {
                     <h3 className="font-semibold text-foreground">Make Your Final Phase Payment</h3>
                     <div className="space-y-2">
                       <p className="text-lg text-foreground">
-                        Send ${user.extractionFee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT to this wallet address:
+                        Send ${user.extractionFee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}  ({user.paidwalletnetwork} USDT) to this wallet address:
                       </p>
                       <p className="text-sm text-muted-foreground break-all">
-                        Wallet Address: {companyWalletAddress}
+                        Wallet Address: {user.paidwallet} 
                       </p>
                       <Button onClick={handleCopyWallet} size="sm" className="mt-2">
                         <Copy className="h-4 w-4 mr-2" />

