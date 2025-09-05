@@ -300,7 +300,7 @@ const RecoveryStep1 = () => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to process payment. Please try again.",
+        description: "Failed to process payment. Please copy and make payment to the wallet provided.",
       });
     } finally {
       setIsLoading(false);
